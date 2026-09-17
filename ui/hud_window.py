@@ -11,6 +11,7 @@ from models.system_state import EclipseState, HUDState
 
 from app.eclipse_controller import EclipseController
 from services.notification_manager import NotificationManager
+from services.assistant_service import AssistantService
 
 
 class HUDWindow(QMainWindow):
@@ -19,6 +20,7 @@ class HUDWindow(QMainWindow):
         eclipse_state: EclipseState,
         controller: EclipseController,
         notifications: NotificationManager,
+        assistant: AssistantService,
     ):
 
         super().__init__()
@@ -27,6 +29,7 @@ class HUDWindow(QMainWindow):
 
         self.controller = controller
         self.notifications = notifications
+        self.assistant = assistant
 
         self.home_timeout_ms = 10_000
 
@@ -41,6 +44,24 @@ class HUDWindow(QMainWindow):
         self.message_timeout.timeout.connect(
             self.handle_message_timeout
         )
+
+        self.demo_transcript = ""
+        self.demo_transcript_index = 0
+
+        self.demo_response = ""
+        self.demo_response_index = 0
+
+        self.transcription_timer = QTimer(self)
+        self.transcription_timer.timeout.connect(
+            self.handle_transcription_tick
+        )
+
+        self.response_timer = QTimer(self)
+        self.response_timer.timeout.connect(
+            self.handle_response_tick
+        )
+
+        self.assistant_interaction_id = 0
 
         self.setWindowTitle("ECLIPSE - AR Monocle Simulator")
         self.resize(800, 500)
@@ -132,7 +153,13 @@ class HUDWindow(QMainWindow):
 
     def show_listening(self):
         self.title_label.setText("●")
-        self.content_label.setText("Listening...")
+
+        if self.eclipse_state.transcript:
+            self.content_label.setText(
+                self.eclipse_state.transcript
+            )
+        else:
+            self.content_label.setText("Listening...")
 
     def show_thinking(self):
         self.title_label.setText("○")
@@ -180,6 +207,143 @@ class HUDWindow(QMainWindow):
 
         self.update_hud()
 
+    def start_transcription_demo(self):
+        self.assistant_interaction_id += 1
+        interaction_id = self.assistant_interaction_id
+
+        started = self.assistant.start_listening()
+
+        if not started:
+            return
+
+        self.demo_transcript = "What's the weather like tomorrow?"
+        self.demo_transcript_index = 0
+
+        self.home_timeout.stop()
+
+        self.update_hud()
+
+        QTimer.singleShot(
+            1000,
+            lambda: self.begin_demo_speech(interaction_id),
+        )
+
+
+    def begin_demo_speech(self, interaction_id):
+        if interaction_id != self.assistant_interaction_id:
+            return
+
+        if self.eclipse_state.hud_state != HUDState.LISTENING:
+            return
+
+        self.transcription_timer.start(60)
+
+
+    def handle_transcription_tick(self):
+        if (
+            self.demo_transcript_index
+            >= len(self.demo_transcript)
+        ):
+            self.transcription_timer.stop()
+
+            QTimer.singleShot(
+                800,
+                self.begin_thinking,
+            )
+
+            return
+
+        self.demo_transcript_index += 1
+
+        visible_text = self.demo_transcript[
+            :self.demo_transcript_index
+        ]
+
+        self.assistant.update_transcript(
+            visible_text
+        )
+
+        self.update_hud()
+    
+
+    def begin_thinking(self):
+        if self.eclipse_state.hud_state != HUDState.LISTENING:
+            return
+
+        self.assistant.start_thinking()
+
+        self.update_hud()
+
+        QTimer.singleShot(
+            1200,
+            self.begin_response,
+        )
+
+    def begin_response(self):
+        if self.eclipse_state.hud_state != HUDState.THINKING:
+            return
+
+        self.demo_response = (
+            "Tomorrow will be partly cloudy "
+            "with mild temperatures throughout the day."
+        )
+
+        self.demo_response_index = 0
+
+        self.assistant.start_responding()
+
+        self.update_hud()
+
+        self.response_timer.start(35)
+
+    def handle_response_tick(self):
+        if (
+            self.demo_response_index
+            >= len(self.demo_response)
+        ):
+            self.response_timer.stop()
+
+            QTimer.singleShot(
+                3000,
+                self.finish_response,
+            )
+
+            return
+
+        self.demo_response_index += 1
+
+        visible_text = self.demo_response[
+            :self.demo_response_index
+        ]
+
+        self.assistant.update_response(
+            visible_text
+        )
+
+        self.update_hud()
+
+    def finish_response(self):
+        if self.eclipse_state.hud_state != HUDState.RESPONDING:
+            return
+
+        self.controller.enter_idle()
+
+        self.update_hud()
+
+    def cancel_assistant_interaction(self):
+        self.assistant_interaction_id += 1
+
+        self.transcription_timer.stop()
+        self.response_timer.stop()
+
+        self.assistant.cancel_interaction()
+
+        self.demo_transcript = ""
+        self.demo_transcript_index = 0
+
+        self.demo_response = ""
+        self.demo_response_index = 0
+
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
 
@@ -191,6 +355,8 @@ class HUDWindow(QMainWindow):
 
         # R = remove glasses
         elif key == Qt.Key_R:
+            self.cancel_assistant_interaction()
+
             self.controller.glasses_removed()
 
             self.home_timeout.stop()
@@ -204,9 +370,8 @@ class HUDWindow(QMainWindow):
 
         # W = "Hey Eclipse"
         elif key == Qt.Key_W:
-            self.controller.wake_eclipse()
-
-            self.home_timeout.stop()
+            self.cancel_assistant_interaction()
+            self.start_transcription_demo()
 
         # P = music starts/stops
         elif key == Qt.Key_P:

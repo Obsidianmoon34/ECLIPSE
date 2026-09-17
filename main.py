@@ -8,6 +8,8 @@ from ui.hud_window import HUDWindow
 from app.eclipse_controller import EclipseController
 from services.notification_manager import NotificationManager
 
+from services.assistant_service import AssistantService
+
 
 def main():
     
@@ -18,13 +20,16 @@ def main():
     controller = EclipseController(eclipse)
     notifications = NotificationManager(eclipse)
 
+    assistant = AssistantService(eclipse)
+
 
     window = HUDWindow(
         eclipse,
         controller,
         notifications,
+        assistant,
     )
-    
+
     window.show()
 
     sys.exit(app.exec())
