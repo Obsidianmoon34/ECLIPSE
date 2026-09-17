@@ -3,6 +3,7 @@ from enum import Enum
 from models.phone_state import PhoneState
 
 class HUDState(Enum):
+    SLEEP = "sleep"
     IDLE = "idle"
     HOME = "home"
     LISTENING = "listening"
@@ -13,7 +14,9 @@ class HUDState(Enum):
 
 @dataclass
 class EclipseState:
-    hud_state: HUDState = HUDState.HOME
+    hud_state: HUDState = HUDState.SLEEP
+
+    is_worn: bool = False
 
     battery_percent: int = 100
 

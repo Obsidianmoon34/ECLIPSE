@@ -1,30 +1,21 @@
+import sys
+
+from PySide6.QtWidgets import QApplication
+
 from models.system_state import EclipseState
+from ui.hud_window import HUDWindow
 
 
 def main():
+    
+    app = QApplication(sys.argv)
+
     eclipse = EclipseState()
 
-    print("ECLIPSE starting...")
-    print(eclipse)
+    window = HUDWindow(eclipse)
+    window.show()
 
-    eclipse.battery_percent = 83
-    eclipse.lens_tint_percent = 24
-
-    eclipse.phone.connected = True
-
-    eclipse.phone.media.playing = True
-    eclipse.phone.media.title = "Blinding Lights"
-    eclipse.phone.media.artist = "The Weekend"
-
-    eclipse.phone.message.active = True
-    eclipse.phone.message.sender = "Alex"
-    eclipse.phone.message.text = "Are you almost here?"
-
-
-
-    print()
-    print("Updated ECLIPSE state:")
-    print(eclipse)
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
