@@ -9,18 +9,38 @@ from PySide6.QtWidgets import (
 
 from models.system_state import EclipseState, HUDState
 
+from app.eclipse_controller import EclipseController
+from services.notification_manager import NotificationManager
+
 
 class HUDWindow(QMainWindow):
-    def __init__(self, eclipse_state: EclipseState):
+    def __init__(
+        self, 
+        eclipse_state: EclipseState,
+        controller: EclipseController,
+        notifications: NotificationManager,
+    ):
+
         super().__init__()
 
         self.eclipse_state = eclipse_state
+
+        self.controller = controller
+        self.notifications = notifications
 
         self.home_timeout_ms = 10_000
 
         self.home_timeout = QTimer(self)
         self.home_timeout.setSingleShot(True)
-        self.home_timeout.timeout.connect(self.enter_idle)
+        self.home_timeout.timeout.connect(self.handle_home_timeout)
+
+        self.message_timeout_ms = 5_000
+
+        self.message_timeout = QTimer(self)
+        self.message_timeout.setSingleShot(True)
+        self.message_timeout.timeout.connect(
+            self.handle_message_timeout
+        )
 
         self.setWindowTitle("ECLIPSE - AR Monocle Simulator")
         self.resize(800, 500)
@@ -75,11 +95,11 @@ class HUDWindow(QMainWindow):
         elif state.hud_state == HUDState.RESPONDING:
             self.show_response()
 
-        if state.phone.call.active:
-            self.show_call()
-
-        elif state.phone.message.active:
+        elif state.hud_state == HUDState.MESSAGE:
             self.show_message()
+        
+        elif state.hud_state == HUDState.INCOMING_CALL:
+            self.show_call()
 
     def show_sleep(self):
         self.title_label.setText("")
@@ -143,61 +163,52 @@ class HUDWindow(QMainWindow):
 
         self.content_label.setText(caller)
 
-    def enter_home(self):
-        if not self.eclipse_state.is_worn:
-            return
-
-        self.eclipse_state.hud_state = HUDState.HOME
-        self.home_timeout.start(self.home_timeout_ms)
+    def handle_home_timeout(self):
+        self.controller.enter_idle()
         self.update_hud()
 
-    def enter_idle(self):
-        if not self.eclipse_state.is_worn:
-            return
-
-        self.eclipse_state.hud_state = HUDState.IDLE
+    def start_message_timer(self):
         self.home_timeout.stop()
-        self.update_hud()
+        self.message_timeout.start(self.message_timeout_ms)
 
-    def enter_sleep(self):
-        self.eclipse_state.is_worn = False
-        self.eclipse_state.hud_state = HUDState.SLEEP
 
-        self.home_timeout.stop()
-        self.update_hud()
+    def handle_message_timeout(self):
+        self.notifications.dismiss_message()
 
-    def glasses_put_on(self):
-        self.eclipse_state.is_worn = True
-        self.enter_home()
+        if self.eclipse_state.hud_state == HUDState.HOME:
+            self.home_timeout.start(self.home_timeout_ms)
 
-    def wake_eclipse(self):
-        if not self.eclipse_state.is_worn:
-            return
-
-        self.home_timeout.stop()
-        self.eclipse_state.hud_state = HUDState.LISTENING
         self.update_hud()
 
     def keyPressEvent(self, event: QKeyEvent):
         key = event.key()
 
-        # G = simulate putting the glasses on
+        # G = put glasses on
         if key == Qt.Key_G:
-            self.glasses_put_on()
+            self.controller.glasses_put_on()
 
-        # R = simulate removing the glasses
+            self.home_timeout.start(self.home_timeout_ms)
+
+        # R = remove glasses
         elif key == Qt.Key_R:
-            self.enter_sleep()
+            self.controller.glasses_removed()
 
-        # T = simulate double-tapping the temple
+            self.home_timeout.stop()
+
+        # T = double-tap temple
         elif key == Qt.Key_T:
-            self.enter_home()
+            self.controller.enter_home()
 
-        # W = simulate saying "Hey Eclipse"
+            if self.eclipse_state.is_worn:
+                self.home_timeout.start(self.home_timeout_ms)
+
+        # W = "Hey Eclipse"
         elif key == Qt.Key_W:
-            self.wake_eclipse()
+            self.controller.wake_eclipse()
 
-        # P = simulate music playing/stopping on the phone
+            self.home_timeout.stop()
+
+        # P = music starts/stops
         elif key == Qt.Key_P:
             media = self.eclipse_state.phone.media
 
@@ -207,26 +218,34 @@ class HUDWindow(QMainWindow):
                 self.eclipse_state.phone.connected = True
                 media.title = "Blinding Lights"
                 media.artist = "The Weeknd"
+
             else:
                 media.title = ""
                 media.artist = ""
 
-            self.enter_home()
-
-        # M = simulate an incoming message
+        # M = incoming message
         elif key == Qt.Key_M:
             self.eclipse_state.phone.connected = True
 
-            self.eclipse_state.phone.message.active = True
-            self.eclipse_state.phone.message.sender = "Alex"
-            self.eclipse_state.phone.message.text = "Are you almost here?"
+            displayed = self.notifications.show_message(
+                sender="Alex",
+                text="Are you almost here?",
+            )
 
-        # C = simulate an incoming phone call
+            if displayed:
+                self.start_message_timer()
+
+        # C = incoming call
         elif key == Qt.Key_C:
             self.eclipse_state.phone.connected = True
 
-            self.eclipse_state.phone.call.active = True
-            self.eclipse_state.phone.call.caller_name = "Alex"
-            self.eclipse_state.phone.call.caller_number = "(555) 123-4567"
+            self.notifications.show_incoming_call(
+                caller_name="Alex",
+                caller_number="(555) 123-4567",
+            )
+
+        # E = simulate call ending
+        elif key == Qt.Key_E:
+            self.notifications.dismiss_call()
 
         self.update_hud()

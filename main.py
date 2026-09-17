@@ -5,6 +5,9 @@ from PySide6.QtWidgets import QApplication
 from models.system_state import EclipseState
 from ui.hud_window import HUDWindow
 
+from app.eclipse_controller import EclipseController
+from services.notification_manager import NotificationManager
+
 
 def main():
     
@@ -12,7 +15,16 @@ def main():
 
     eclipse = EclipseState()
 
-    window = HUDWindow(eclipse)
+    controller = EclipseController(eclipse)
+    notifications = NotificationManager(eclipse)
+
+
+    window = HUDWindow(
+        eclipse,
+        controller,
+        notifications,
+    )
+    
     window.show()
 
     sys.exit(app.exec())

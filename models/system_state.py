@@ -11,6 +11,9 @@ class HUDState(Enum):
     RESPONDING = "responding"
     NAVIGATION = "navigation"
 
+    MESSAGE = "message"
+    INCOMING_CALL = "incoming_call"
+
 
 @dataclass
 class EclipseState:
