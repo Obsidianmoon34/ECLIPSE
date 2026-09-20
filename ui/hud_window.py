@@ -299,19 +299,43 @@ class HUDWindow(QMainWindow):
         if self.eclipse_state.hud_state != HUDState.THINKING:
             return
 
+        # Simulate the output of a future AI model.
         if self.demo_type == "lens_tint":
+            ai_output = {
+                "type": "tool_call",
+                "name": "set_lens_tint",
+                "arguments": {
+                    "percent": 40,
+                },
+            }
 
-            result = self.assistant.execute_tool(
-                "set_lens_tint",
-                percent=40,
-            )
+        else:
+            ai_output = {
+                "type": "text_response",
+                "message": (
+                    "Tomorrow will be partly cloudy "
+                    "with mild temperatures throughout the day."
+                ),
+            }
 
+        # Send the simulated AI output through our assistant router.
+        result = self.assistant.process_assistant_output(
+            ai_output
+        )
+
+        # Convert the result into text for the HUD.
+        if result["type"] == "tool_result":
+            tool_result = result["result"]
+
+            self.demo_response = tool_result["message"]
+
+        elif result["type"] == "text_response":
             self.demo_response = result["message"]
 
         else:
-            self.demo_response = (
-                "Tomorrow will be partly cloudy "
-                "with mild temperatures throughout the day."
+            self.demo_response = result.get(
+                "message",
+                "Sorry, I couldn't complete that request.",
             )
 
         self.demo_response_index = 0
