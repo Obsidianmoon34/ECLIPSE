@@ -1,6 +1,7 @@
 from models.system_state import EclipseState, HUDState
 from tools.tool_registry import ToolRegistry
 from services.assistant_router import AssistantRouter
+from services.ai_service import AIService
 
 
 class AssistantService:
@@ -8,11 +9,13 @@ class AssistantService:
         self, 
         state: EclipseState,
         registry: ToolRegistry,
+        ai_service: AIService | None = None,
     ):
         self.state = state
         self.registry = registry
 
         self.router = AssistantRouter(registry)
+        self.ai_service = ai_service
 
     def start_listening(self):
         if not self.state.is_worn:
@@ -122,3 +125,16 @@ class AssistantService:
             "type": "error",
             "message": "Unknown assistant output type.",
         }
+
+    def generate_ai_response(self, user_message: str) -> str:
+        if self.ai_service is None:
+            raise RuntimeError(
+                "ECLIPSE AI service is not configured."
+            )
+
+        if not self.state.is_worn:
+            raise RuntimeError(
+                "ECLIPSE is not being worn."
+            )
+
+        return self.ai_service.generate_response(user_message)
