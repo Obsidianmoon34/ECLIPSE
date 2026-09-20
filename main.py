@@ -13,6 +13,8 @@ from services.assistant_service import AssistantService
 from tools.tool_registry import ToolRegistry
 from tools.device_tools import register_device_tools
 
+from services.ai_service import AIService
+
 
 def main():
     
@@ -36,6 +38,7 @@ def main():
     assistant = AssistantService(
         eclipse,
         registry,
+        ai_service=AIService(),
     )
 
     window = HUDWindow(

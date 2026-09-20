@@ -1,4 +1,4 @@
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, Slot
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import (
     QLabel,
@@ -12,6 +12,7 @@ from models.system_state import EclipseState, HUDState
 from app.eclipse_controller import EclipseController
 from services.notification_manager import NotificationManager
 from services.assistant_service import AssistantService
+from services.ai_worker import AIWorker
 
 
 class HUDWindow(QMainWindow):
@@ -30,6 +31,10 @@ class HUDWindow(QMainWindow):
         self.controller = controller
         self.notifications = notifications
         self.assistant = assistant
+
+        self.ai_requests = {}
+        self.pending_ai_request = None
+        self.is_closing = False
 
         self.home_timeout_ms = 10_000
 
@@ -299,6 +304,10 @@ class HUDWindow(QMainWindow):
         if self.eclipse_state.hud_state != HUDState.THINKING:
             return
 
+        if self.demo_type == "weather":
+            self.start_ai_request(interaction_id)
+            return
+
         # Simulate the output of a future AI model.
         if self.demo_type == "lens_tint":
             ai_output = {
@@ -465,3 +474,183 @@ class HUDWindow(QMainWindow):
             self.notifications.dismiss_call()
 
         self.update_hud()
+
+
+    def start_ai_request(self, interaction_id):
+        if self.is_closing:
+            return
+
+        if interaction_id != self.assistant_interaction_id:
+            return
+
+        if self.eclipse_state.hud_state != HUDState.THINKING:
+            return
+
+        if self.ai_requests:
+            self.pending_ai_request = (
+                interaction_id,
+                self.demo_transcript,
+            )
+            return
+
+        self.launch_ai_request(
+            interaction_id,
+            self.demo_transcript,
+        )
+
+
+    def launch_ai_request(
+        self,
+        interaction_id,
+        user_message,
+    ):
+        thread = QThread(self)
+
+        worker = AIWorker(
+            assistant=self.assistant,
+            interaction_id=interaction_id,
+            user_message=user_message,
+        )
+
+        worker.moveToThread(thread)
+
+        self.ai_requests[interaction_id] = {
+            "thread": thread,
+            "worker": worker,
+        }
+
+        thread.started.connect(worker.run)
+
+        worker.response_ready.connect(
+            self.handle_ai_response
+        )
+
+        worker.error_occurred.connect(
+            self.handle_ai_error
+        )
+
+        worker.finished.connect(thread.quit)
+        worker.finished.connect(worker.deleteLater)
+
+        thread.setProperty(
+            "interaction_id",
+            interaction_id,
+        )
+
+        thread.finished.connect(
+            self.handle_ai_thread_finished
+        )
+
+        thread.start()
+
+
+    def handle_ai_response(self, interaction_id, response):
+        if self.is_closing:
+            return
+
+        if interaction_id != self.assistant_interaction_id:
+            return
+
+        if self.eclipse_state.hud_state != HUDState.THINKING:
+            return
+
+        self.demo_response = response
+        self.demo_response_index = 0
+
+        self.assistant.start_responding()
+        self.update_hud()
+
+        self.response_timer.start(35)
+
+
+    def handle_ai_error(self, interaction_id, message):
+        if self.is_closing:
+            return
+
+        if interaction_id != self.assistant_interaction_id:
+            return
+
+        if self.eclipse_state.hud_state != HUDState.THINKING:
+            return
+
+        print(f"ECLIPSE AI error: {message}")
+
+        self.demo_response = (
+            "Sorry, I couldn't reach the AI service."
+        )
+
+        self.demo_response_index = 0
+
+        self.assistant.start_responding()
+        self.update_hud()
+
+        self.response_timer.start(35)
+
+
+    @Slot()
+    def handle_ai_thread_finished(self):
+        thread = self.sender()
+
+        if thread is None:
+            return
+
+        interaction_id = thread.property(
+            "interaction_id"
+        )
+
+        request = self.ai_requests.pop(
+            interaction_id,
+            None,
+        )
+
+        if request is not None:
+            request["thread"].deleteLater()
+
+        if self.is_closing:
+            if not self.ai_requests:
+                QTimer.singleShot(
+                    0,
+                    self.close,
+                )
+
+            return
+
+        if self.pending_ai_request is None:
+            return
+
+        pending_id, pending_message = (
+            self.pending_ai_request
+        )
+
+        self.pending_ai_request = None
+
+        if pending_id != self.assistant_interaction_id:
+            return
+
+        if self.eclipse_state.hud_state != HUDState.THINKING:
+            return
+
+        QTimer.singleShot(
+            0,
+            lambda: self.launch_ai_request(
+                pending_id,
+                pending_message,
+            ),
+        )
+
+
+    def closeEvent(self, event):
+        if self.ai_requests:
+            self.is_closing = True
+            self.pending_ai_request = None
+
+            event.ignore()
+
+            self.setWindowTitle(
+                "ECLIPSE -- Finishing AI request..."
+            )
+
+            return
+
+        event.accept()
+    
