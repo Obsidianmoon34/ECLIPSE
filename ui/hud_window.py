@@ -207,17 +207,26 @@ class HUDWindow(QMainWindow):
 
         self.update_hud()
 
-    def start_transcription_demo(self):
-        self.assistant_interaction_id += 1
-        interaction_id = self.assistant_interaction_id
+    def start_transcription_demo(self, demo_type="weather"):
+        self.cancel_assistant_interaction()
 
         started = self.assistant.start_listening()
 
         if not started:
             return
 
-        self.demo_transcript = "What's the weather like tomorrow?"
+        self.demo_type = demo_type
+
+        if demo_type == "lens_tint":
+            self.demo_transcript = "Set my lens tint to 40%."
+
+        else:
+            self.demo_transcript = "What's the weather like tomorrow?"
+
         self.demo_transcript_index = 0
+
+        self.assistant_interaction_id += 1
+        interaction_id = self.assistant_interaction_id
 
         self.home_timeout.stop()
 
@@ -240,15 +249,18 @@ class HUDWindow(QMainWindow):
 
 
     def handle_transcription_tick(self):
-        if (
-            self.demo_transcript_index
-            >= len(self.demo_transcript)
-        ):
+        if self.eclipse_state.hud_state != HUDState.LISTENING:
             self.transcription_timer.stop()
+            return
+
+        if self.demo_transcript_index >= len(self.demo_transcript):
+            self.transcription_timer.stop()
+
+            interaction_id = self.assistant_interaction_id
 
             QTimer.singleShot(
                 800,
-                self.begin_thinking,
+                lambda: self.begin_thinking(interaction_id),
             )
 
             return
@@ -259,14 +271,15 @@ class HUDWindow(QMainWindow):
             :self.demo_transcript_index
         ]
 
-        self.assistant.update_transcript(
-            visible_text
-        )
+        self.assistant.update_transcript(visible_text)
 
         self.update_hud()
     
 
-    def begin_thinking(self):
+    def begin_thinking(self, interaction_id):
+        if interaction_id != self.assistant_interaction_id:
+            return
+
         if self.eclipse_state.hud_state != HUDState.LISTENING:
             return
 
@@ -276,17 +289,30 @@ class HUDWindow(QMainWindow):
 
         QTimer.singleShot(
             1200,
-            self.begin_response,
+            lambda: self.begin_response(interaction_id),
         )
 
-    def begin_response(self):
+    def begin_response(self, interaction_id):
+        if interaction_id != self.assistant_interaction_id:
+            return
+
         if self.eclipse_state.hud_state != HUDState.THINKING:
             return
 
-        self.demo_response = (
-            "Tomorrow will be partly cloudy "
-            "with mild temperatures throughout the day."
-        )
+        if self.demo_type == "lens_tint":
+
+            result = self.assistant.execute_tool(
+                "set_lens_tint",
+                percent=40,
+            )
+
+            self.demo_response = result["message"]
+
+        else:
+            self.demo_response = (
+                "Tomorrow will be partly cloudy "
+                "with mild temperatures throughout the day."
+            )
 
         self.demo_response_index = 0
 
@@ -295,7 +321,6 @@ class HUDWindow(QMainWindow):
         self.update_hud()
 
         self.response_timer.start(35)
-
     def handle_response_tick(self):
         if (
             self.demo_response_index
@@ -370,8 +395,10 @@ class HUDWindow(QMainWindow):
 
         # W = "Hey Eclipse"
         elif key == Qt.Key_W:
-            self.cancel_assistant_interaction()
-            self.start_transcription_demo()
+            self.start_transcription_demo("weather")
+
+        elif key == Qt.Key_L:
+            self.start_transcription_demo("lens_tint")
 
         # P = music starts/stops
         elif key == Qt.Key_P:

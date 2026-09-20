@@ -30,3 +30,26 @@ class EclipseController:
             return
 
         self.state.hud_state = HUDState.LISTENING
+
+    def set_lens_tint(self, percent: int):
+        if isinstance(percent, bool) or not isinstance(percent, int):
+            raise ValueError(
+                "Lens tint percentage must be an integer."
+            )
+        
+        if not 0 <= percent <= 100:
+            raise ValueError(
+                "Lens tint percentage must be between 0 and 100."
+            )
+
+        self.state.lens_tint_percent = percent
+
+        self.state.auto_tint_enabled = False
+
+        return {
+            "success": True,
+            "tint_percent": percent,
+            "message": f"Lens tint set to {percent}%."
+        }
+
+        

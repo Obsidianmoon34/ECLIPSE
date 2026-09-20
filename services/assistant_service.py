@@ -1,9 +1,15 @@
 from models.system_state import EclipseState, HUDState
+from tools.tool_registry import ToolRegistry
 
 
 class AssistantService:
-    def __init__(self, state: EclipseState):
+    def __init__(
+        self, 
+        state: EclipseState,
+        registry: ToolRegistry,
+    ):
         self.state = state
+        self.registry = registry
 
     def start_listening(self):
         if not self.state.is_worn:
@@ -47,3 +53,25 @@ class AssistantService:
     def cancel_interaction(self):
         self.state.transcript = ""
         self.state.assistant_response = ""
+
+
+    def execute_tool(self, name: str, **kwargs):
+        if not self.state.is_worn:
+            return {
+                "success": False,
+                "message": "ECLIPSE is not being worn."
+            }
+
+        try:
+            result = self.registry.execute_tool(
+                name,
+                **kwargs,
+            )
+
+            return result
+        
+        except (ValueError, TypeError) as error:
+            return {
+                "success": False,
+                "message": str(error),
+            }

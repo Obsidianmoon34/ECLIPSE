@@ -10,6 +10,9 @@ from services.notification_manager import NotificationManager
 
 from services.assistant_service import AssistantService
 
+from tools.tool_registry import ToolRegistry
+from tools.device_tools import register_device_tools
+
 
 def main():
     
@@ -20,8 +23,20 @@ def main():
     controller = EclipseController(eclipse)
     notifications = NotificationManager(eclipse)
 
-    assistant = AssistantService(eclipse)
+    controller = EclipseController(eclipse)
 
+    registry = ToolRegistry()
+
+    register_device_tools(
+        registry,
+        controller,
+    )
+
+    notifications = NotificationManager(eclipse)
+    assistant = AssistantService(
+        eclipse,
+        registry,
+    )
 
     window = HUDWindow(
         eclipse,
