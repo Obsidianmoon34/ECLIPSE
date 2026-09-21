@@ -15,6 +15,8 @@ from services.assistant_service import AssistantService
 from services.ai_worker import AIWorker
 
 
+import textwrap
+
 class HUDWindow(QMainWindow):
     def __init__(
         self, 
@@ -91,11 +93,42 @@ class HUDWindow(QMainWindow):
         self.title_label.setAlignment(Qt.AlignCenter)
 
         self.content_label = QLabel()
-        self.content_label.setAlignment(Qt.AlignCenter)
 
+        self.content_label.setAlignment(
+            Qt.AlignHCenter | Qt.AlignVCenter
+        )
+
+        self.content_label.setWordWrap(True)
+
+        # Fixed-size teleprompter display
+        self.response_width = 600
+        self.response_height = 120
+
+        self.content_label.setFixedSize(
+            self.response_width,
+            self.response_height,
+        )
+
+        self.content_label.setStyleSheet("""
+            QLabel {
+                color: white;
+                font-size: 16px;
+            }
+        """)
+
+        # Center the title and response as one group.
         self.layout.addStretch()
-        self.layout.addWidget(self.title_label)
-        self.layout.addWidget(self.content_label)
+
+        self.layout.addWidget(
+            self.title_label,
+            alignment=Qt.AlignHCenter,
+        )
+
+        self.layout.addWidget(
+            self.content_label,
+            alignment=Qt.AlignHCenter,
+        )
+
         self.layout.addStretch()
 
         self.update_hud()
@@ -172,9 +205,33 @@ class HUDWindow(QMainWindow):
 
     def show_response(self):
         self.title_label.setText("E C L I P S E")
-        self.content_label.setText(
+
+        visible_text = self.format_teleprompter(
             self.eclipse_state.assistant_response
         )
+
+        self.content_label.setText(visible_text)
+
+    def format_teleprompter(self, text):
+        max_characters = 55
+        max_lines = 4
+
+        lines = []
+
+        for paragraph in text.split("\n"):
+            wrapped = textwrap.wrap(
+                paragraph,
+                width=max_characters,
+                break_long_words=True,
+                break_on_hyphens=False,
+            )
+
+            lines.extend(wrapped if wrapped else [""])
+
+        visible_lines = lines[-max_lines:]
+
+        return "\n".join(visible_lines)
+    
 
     def show_message(self):
         message = self.eclipse_state.phone.message
@@ -304,7 +361,7 @@ class HUDWindow(QMainWindow):
         if self.eclipse_state.hud_state != HUDState.THINKING:
             return
 
-        if self.demo_type == "weather":
+        if self.demo_type in ("weather", "lens_tint"):
             self.start_ai_request(interaction_id)
             return
 
@@ -525,6 +582,10 @@ class HUDWindow(QMainWindow):
             self.handle_ai_response
         )
 
+        worker.tool_calls_ready.connect(
+            self.handle_ai_tool_calls
+        )
+
         worker.error_occurred.connect(
             self.handle_ai_error
         )
@@ -653,4 +714,52 @@ class HUDWindow(QMainWindow):
             return
 
         event.accept()
+
+
+    @Slot(int, object)
+    def handle_ai_tool_calls(
+        self,
+        interaction_id,
+        tool_calls,
+    ):
+        if self.is_closing:
+            return
+
+        if interaction_id != self.assistant_interaction_id:
+            return
+
+        if self.eclipse_state.hud_state != HUDState.THINKING:
+            return
+
+        messages = []
+
+        for tool_call in tool_calls:
+            result = self.assistant.process_assistant_output({
+                "type": "tool_call",
+                "name": tool_call["name"],
+                "arguments": tool_call["arguments"],
+            })
+
+            if result["type"] == "tool_result":
+                messages.append(
+                    result["result"]["message"]
+                )
+
+            else:
+                messages.append(
+                    result.get(
+                        "message",
+                        "Sorry, I couldn't complete that command.",
+                    )
+                )
+
+        self.demo_response = " ".join(messages)
+
+        self.demo_response_index = 0
+
+        self.assistant.start_responding()
+
+        self.update_hud()
+
+        self.response_timer.start(35)
     

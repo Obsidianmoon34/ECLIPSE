@@ -3,6 +3,8 @@ from tools.tool_registry import ToolRegistry
 from services.assistant_router import AssistantRouter
 from services.ai_service import AIService
 
+import json
+
 
 class AssistantService:
     def __init__(
@@ -138,3 +140,41 @@ class AssistantService:
             )
 
         return self.ai_service.generate_response(user_message)
+
+
+    def execute_ai_tool_calls(self, ai_response):
+        if not self.state.is_worn:
+            return [
+                {
+                    "type": "error",
+                    "message": "ECLIPSE is not being worn.",
+                }
+            ]
+
+        results = []
+
+        for item in ai_response.output:
+            if item.type != "function_call":
+                continue
+
+            try:
+                arguments = json.loads(item.arguments)
+
+            except (json.JSONDecodeError, TypeError):
+                results.append({
+                    "type": "error",
+                    "tool_name": item.name,
+                    "message": "Invalid tool arguments.",
+                })
+
+                continue
+
+            result = self.process_assistant_output({
+                "type": "tool_call",
+                "name": item.name,
+                "arguments": arguments,
+            })
+
+            results.append(result)
+
+        return results

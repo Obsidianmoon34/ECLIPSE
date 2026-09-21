@@ -3,6 +3,8 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 
+from tools.tool_registry import ToolRegistry
+
 
 class AIService:
     def __init__(self):
@@ -48,3 +50,33 @@ class AIService:
         )
 
         return response.output_text
+
+
+    def generate_with_tools(
+        self, 
+        user_message: str,
+        registry: ToolRegistry,
+    ):
+
+        if not user_message.strip():
+            raise ValueError(
+                "The user message cannot be empty."
+            )
+
+        response = self.client.responses.create(
+            model=self.model,
+            instructions=(
+                "You are ECLIPSE, an AI assistant integrated "
+                "into augmented reality glasses. "
+                "Answer general questions concisely. "
+                "When the user requests a supported device action, "
+                "select the appropriate tool. "
+                "Never claim that a device action succeeded "
+                "until its execution has been confirmed."
+            ),
+            input=user_message,
+            tools=registry.get_tool_definitions(),
+            max_output_tokens=300,
+        )
+
+        return response
