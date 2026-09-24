@@ -5,6 +5,7 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QVBoxLayout,
     QWidget,
+    QInputDialog,
 )
 
 from models.system_state import EclipseState, HUDState
@@ -269,7 +270,11 @@ class HUDWindow(QMainWindow):
 
         self.update_hud()
 
-    def start_transcription_demo(self, demo_type="weather"):
+    def start_transcription_demo(
+        self, 
+        demo_type="weather",
+        custom_text=None,
+    ):
         self.cancel_assistant_interaction()
 
         started = self.assistant.start_listening()
@@ -279,7 +284,10 @@ class HUDWindow(QMainWindow):
 
         self.demo_type = demo_type
 
-        if demo_type == "lens_tint":
+        if demo_type == "custom":
+            self.demo_transcript = custom_text
+
+        elif demo_type == "lens_tint":
             self.demo_transcript = "Set my lens tint to 40%."
 
         else:
@@ -361,7 +369,7 @@ class HUDWindow(QMainWindow):
         if self.eclipse_state.hud_state != HUDState.THINKING:
             return
 
-        if self.demo_type in ("weather", "lens_tint"):
+        if self.demo_type in ("weather", "lens_tint", "custom"):
             self.start_ai_request(interaction_id)
             return
 
@@ -489,6 +497,9 @@ class HUDWindow(QMainWindow):
 
         elif key == Qt.Key_L:
             self.start_transcription_demo("lens_tint")
+
+        elif key == Qt.Key_A:
+            self.start_custom_request()
 
         # P = music starts/stops
         elif key == Qt.Key_P:
@@ -762,4 +773,31 @@ class HUDWindow(QMainWindow):
         self.update_hud()
 
         self.response_timer.start(35)
+
+
+    def start_custom_request(self):
+        if self.is_closing:
+            return
+
+        if not self.eclipse_state.is_worn:
+            return
+
+        text, accepted = QInputDialog.getText(
+            self,
+            "ECLIPSE Assistant",
+            "What would you like to ask ECLIPSE?",
+        )
+
+        if not accepted:
+            return
+
+        text = text.strip()
+
+        if not text:
+            return
+
+        self.start_transcription_demo(
+            demo_type="custom",
+            custom_text=text,
+        )
     
