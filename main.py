@@ -15,6 +15,11 @@ from tools.device_tools import register_device_tools
 
 from services.ai_service import AIService
 
+from communication.command_handler import CommandHandler
+from communication.qt_bridge import QtCommunicationBridge
+from communication.server import configure_server
+from communication.server_runner import CommunicationServerRunner
+
 
 def main():
     
@@ -25,8 +30,6 @@ def main():
     controller = EclipseController(eclipse)
     notifications = NotificationManager(eclipse)
 
-    controller = EclipseController(eclipse)
-
     registry = ToolRegistry()
 
     register_device_tools(
@@ -34,11 +37,20 @@ def main():
         controller,
     )
 
-    notifications = NotificationManager(eclipse)
     assistant = AssistantService(
         eclipse,
         registry,
         ai_service=AIService(),
+    )
+
+    command_handler = CommandHandler(assistant)
+
+    qt_bridge = QtCommunicationBridge(
+        command_handler
+    )
+
+    configure_server(
+        bridge=qt_bridge
     )
 
     window = HUDWindow(
@@ -49,6 +61,13 @@ def main():
     )
 
     window.show()
+
+    communication_server = CommunicationServerRunner()
+    communication_server.start()
+
+    app.aboutToQuit.connect(
+        communication_server.stop
+    )
 
     sys.exit(app.exec())
 
