@@ -261,6 +261,13 @@ class HUDWindow(QMainWindow):
         self.home_timeout.stop()
         self.message_timeout.start(self.message_timeout_ms)
 
+    @Slot()
+    def handle_phone_event(self):
+        self.update_hud()
+
+        if self.eclipse_state.hud_state == HUDState.MESSAGE:
+            self.start_message_timer()
+
 
     def handle_message_timeout(self):
         self.notifications.dismiss_message()

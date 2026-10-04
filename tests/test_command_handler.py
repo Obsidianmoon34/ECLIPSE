@@ -5,6 +5,7 @@ from models.system_state import EclipseState
 from services.assistant_service import AssistantService
 from tools.device_tools import register_device_tools
 from tools.tool_registry import ToolRegistry
+from services.notification_manager import NotificationManager
 
 
 def test_command_handler():
@@ -19,7 +20,12 @@ def test_command_handler():
         registry,
     )
 
-    handler = CommandHandler(assistant)
+    notifications = NotificationManager(state)
+
+    handler = CommandHandler(
+        assistant,
+        notifications,
+    )
 
     # Simulate putting on the glasses.
     controller.glasses_put_on()

@@ -91,6 +91,16 @@ def execute_command(
         message,
     )
 
+@app.post("/api/phone-event")
+def receive_phone_event(
+    message: dict,
+    _auth=Depends(verify_phone_token),
+):
+    return dispatch_to_qt(
+        "phone_event",
+        message,
+    )
+
 
 
 def dispatch_to_qt(

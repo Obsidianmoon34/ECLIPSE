@@ -43,7 +43,10 @@ def main():
         ai_service=AIService(),
     )
 
-    command_handler = CommandHandler(assistant)
+    command_handler = CommandHandler(
+        assistant,
+        notifications,
+    )
 
     qt_bridge = QtCommunicationBridge(
         command_handler
@@ -58,6 +61,10 @@ def main():
         controller,
         notifications,
         assistant,
+    )
+
+    qt_bridge.phone_event_received.connect(
+        window.handle_phone_event
     )
 
     window.show()

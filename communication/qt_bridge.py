@@ -8,6 +8,7 @@ from communication.protocol import create_device_status
 
 class QtCommunicationBridge(QObject):
     request_received = Signal(object)
+    phone_event_received = Signal()
 
     def __init__(self, handler: CommandHandler):
         super().__init__()
@@ -50,6 +51,14 @@ class QtCommunicationBridge(QObject):
                 result = self.handler.handle_command(
                     payload
                 )
+
+            elif operation == "phone_event":
+                result = self.handler.handle_phone_event(
+                    payload
+                )
+
+                if result.get("success"):
+                    self.phone_event_received.emit()
 
             else:
                 raise ValueError(
